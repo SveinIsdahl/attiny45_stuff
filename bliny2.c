@@ -1,8 +1,8 @@
 #include <avr/io.h>
 #include <util/delay.h>
 //Standard speed
-#define I2C_TLOW 47
-#define I2C_THIGH 40
+#define I2C_TLOW 4.7
+#define I2C_THIGH 4.0
 
 
 #define SDA_HIGH() {PORTB |= (1 << PB0);}
@@ -29,17 +29,17 @@
 #define CLOCK_STROBE() {USICR |= (1 << USIWM1) | (1 << USICS1) | (1 << USICLK) | (1 << USITC);}
 
 char send() {
+	char temp = USIDR;
 	do {
 		WAIT_LOW();
 		CLOCK_STROBE(); //Positive edge SCL
 		while(!(PINB & (1 << PB2))); //Wait for scl to go high	
 		WAIT_HIGH();
 		CLOCK_STROBE(); //Negative edge SCL
-	} while(!USISR & (1 << USIOIF)); //Cointinue until counter Overflow, could be interrupt instead of poll
+	} while(!(USISR & (1 << USIOIF))); //Cointinue until counter Overflow, could be interrupt instead of poll
 	WAIT_LOW(); 
-	char temp = USIDR;
-	USIDR = 0xFF;
-	SDA_OUT();
+	//USIDR = 0xFF;
+	//SDA_OUT();
 	return temp;
 }
 void start_transfer() {
@@ -49,7 +49,7 @@ void start_transfer() {
 	SDA_HIGH();
 	SDA_OUT();
 	SCL_OUT();
-	CLOCK_STROBE();	
+	//CLOCK_STROBE();	
 	//Start condition fig 15-5 p. 113
 
 	//SCL_HIGH();
@@ -65,22 +65,25 @@ void start_transfer() {
 	
 	//Address and r/w
 	//SCL_LOW();
-	USIDR = 0x3c; //Data
+	USIDR = 0x78; //Data
 	USISR = USISR_TRANSFER_8_BIT; //Amount of data
+	send();
+	
 	SDA_IN();
-	USIDR = USISR_TRANSFER_1_BIT;
+	USISR = USISR_TRANSFER_1_BIT;
 	//Check for ack
 	if((send() & (1 << 0))) {
 		//Error-LED
-		PORTB |= (1 << PB3);
+		//PORTB |= (1 << PB3);
 	}
-	
+	WAIT_LOW();
+	SDA_OUT();
 }
 void stop() {
 	SDA_LOW();
 	WAIT_LOW();
 	SCL_IN();
-	while(!PINB & (1 << PB2));
+	while(!(PINB & (1 << PB2)));
 	WAIT_HIGH();
 	SDA_IN();
 }
@@ -92,27 +95,58 @@ int main() {
 
 	start_transfer();	
 
+	
+	USIDR = 0x00;
+	USISR = USISR_TRANSFER_8_BIT;
+	send();
+	SDA_IN();
+	USISR = USISR_TRANSFER_1_BIT;
+	//Check for ack
+	if((send() & (1 << 0))) {
+		//Error-LED
+		PORTB |= (1 << PB3);
+	}
+	SDA_OUT();
+	
+	USIDR = 0xA5;
+	USISR = USISR_TRANSFER_8_BIT;
+	send();
+	SDA_IN();
+	USISR = USISR_TRANSFER_1_BIT;
+	//Check for ack
+	if((send() & (1 << 0))) {
+		//Error-LED
+		PORTB |= (1 << PB3);
+	}
+	SDA_OUT();
 
+	
+	USIDR = 0x00;
+	USISR = USISR_TRANSFER_8_BIT;
+	send();
+	SDA_IN();
+	USISR = USISR_TRANSFER_1_BIT;
+	//Check for ack
+	if((send() & (1 << 0))) {
+		//Error-LED
+		PORTB |= (1 << PB3);
+	}
+	SDA_OUT();
+	
 	USIDR = 0xAF;
 	USISR = USISR_TRANSFER_8_BIT;
 	send();
-	USIDR = 0xA5;
-	USISR = USISR_TRANSFER_8_BIT;
-	send();
-			
-	USIDR = 0xA5;
-	USISR = USISR_TRANSFER_8_BIT;
-	send();
-	
-	USIDR = 0xA5;
-	USISR = USISR_TRANSFER_8_BIT;
-	send();
+	SDA_IN();
+	USISR = USISR_TRANSFER_1_BIT;
+	//Check for ack
+	if((send() & (1 << 0))) {
+		//Error-LED
+		PORTB |= (1 << PB3);
+	}
 
-	USIDR = 0xA5;
-	USISR = USISR_TRANSFER_8_BIT;
-	send();
-	
+
 	stop();
+
 	for(;;) {
 
 	}
