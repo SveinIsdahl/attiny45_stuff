@@ -1,8 +1,8 @@
 #include <avr/io.h>
 #include <util/delay.h>
 //Standard speed
-#define I2C_TLOW 4.7
-#define I2C_THIGH 4.0
+#define I2C_TLOW 47
+#define I2C_THIGH 40
 
 
 #define SDA_HIGH() {PORTB |= (1 << PB0);}
@@ -21,21 +21,40 @@
 #define WAIT_LOW()  { _delay_us(I2C_TLOW);  } 
 
 
+#define USISR_TRANSFER_8_BIT 0b11110000 | (0x00)
+#define USISR_TRANSFER_1_BIT 0b11110000 | (0b00001110)
 
 
+//Set 2-wire USI (i2c),  internal clock, toggle clock port
+#define CLOCK_STROBE() {USICR |= (1 << USIWM1) | (1 << USICS1) | (1 << USICLK) | (1 << USITC);}
+
+char send() {
+	do {
+		WAIT_LOW();
+		CLOCK_STROBE(); //Positive edge SCL
+		while(!(PINB & (1 << PB2))); //Wait for scl to go high	
+		WAIT_HIGH();
+		CLOCK_STROBE(); //Negative edge SCL
+	} while(!USISR & (1 << USIOIF)); //Cointinue until counter Overflow, could be interrupt instead of poll
+	WAIT_LOW(); 
+	char temp = USIDR;
+	USIDR = 0xFF;
+	SDA_OUT();
+	return temp;
+}
 void start_transfer() {
-	
+	_delay_ms(10);
+	USIDR = 0xff;
+	SCL_HIGH();
+	SDA_HIGH();
 	SDA_OUT();
 	SCL_OUT();
-
-	//Set 2-wire USI (i2c),  internal clock, toggle clock port
-	USICR |= (1 << USIWM0) | (1 << USIWM1) | (1 << USICLK) | (1 << USICLK);
-	
+	CLOCK_STROBE();	
 	//Start condition fig 15-5 p. 113
 
-	SCL_HIGH();
-	//SHITTY FIX, should wait for SCL to go high
-	WAIT_LOW();
+	//SCL_HIGH();
+	//Wait for SCL to go high
+	while(!(PINB & (1 << PB2)));	
 
 	WAIT_LOW();
 	SDA_LOW();
@@ -43,25 +62,59 @@ void start_transfer() {
 	SCL_LOW();
 	WAIT_LOW();
 	SDA_HIGH();	
-	//Address
-	send(0x3c);
 	
-
+	//Address and r/w
+	//SCL_LOW();
+	USIDR = 0x3c; //Data
+	USISR = USISR_TRANSFER_8_BIT; //Amount of data
+	SDA_IN();
+	USIDR = USISR_TRANSFER_1_BIT;
+	//Check for ack
+	if((send() & (1 << 0))) {
+		//Error-LED
+		PORTB |= (1 << PB3);
+	}
+	
 }
-void send(char *msg) {
-	SCL_LOW();
-	USIDR = *(msg);
-	//Increment for ACK
-	msg += 1;
-	
-
-
+void stop() {
+	SDA_LOW();
+	WAIT_LOW();
+	SCL_IN();
+	while(!PINB & (1 << PB2));
+	WAIT_HIGH();
+	SDA_IN();
 }
 int main() {
 
+	_delay_ms(1000);
+	
+	DDRB |= (1 << PB3);
+
 	start_transfer();	
+
+
+	USIDR = 0xAF;
+	USISR = USISR_TRANSFER_8_BIT;
+	send();
+	USIDR = 0xA5;
+	USISR = USISR_TRANSFER_8_BIT;
+	send();
+			
+	USIDR = 0xA5;
+	USISR = USISR_TRANSFER_8_BIT;
+	send();
+	
+	USIDR = 0xA5;
+	USISR = USISR_TRANSFER_8_BIT;
+	send();
+
+	USIDR = 0xA5;
+	USISR = USISR_TRANSFER_8_BIT;
+	send();
+	
+	stop();
 	for(;;) {
-		
+
 	}
 
 
